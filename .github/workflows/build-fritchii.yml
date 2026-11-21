@@ -58,9 +58,6 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_TESTING=OFF \
             -DYUZU_TESTS=OFF \
-            -DYUZU_CMD=ON \
-            -DYUZU_ROOM=OFF \
-            -DYUZU_ROOM_STANDALONE=OFF \
             -DYUZU_USE_BUNDLED_QT=OFF \
             -DYUZU_USE_BUNDLED_SDL3=ON \
             -DENABLE_UPDATE_CHECKER=ON \
@@ -76,7 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           sccache --zero-stats
-          cmake --build build/release --target yuzu yuzu-cmd --parallel \
+          cmake --build build/release --target yuzu --parallel \
             2>&1 | tee build.log
           sccache --show-stats
 
@@ -85,31 +82,28 @@ jobs:
         shell: pwsh
         run: sccache --stop-server
 
-      - name: Package Windows binaries
+      - name: Verify Windows executables
         shell: pwsh
         run: |
           $binDir = "build/release/bin"
 
-          foreach ($exe in 'fritchii.exe', 'lichii.exe', 'eden-cli.exe') {
+          foreach ($exe in 'fritchii.exe', 'lichii.exe') {
             if (-not (Test-Path "$binDir/$exe")) {
               throw "$exe was not produced by the build."
             }
           }
 
-          windeployqt --release --no-translations "$binDir/fritchii.exe" 2>&1 |
-            Tee-Object -FilePath package.log
-
-          if ($LASTEXITCODE -ne 0) {
-            throw "windeployqt failed with exit code $LASTEXITCODE"
-          }
+          Write-Host "Both expected executables were produced successfully."
 
       - name: Prepare artifact and build information
         shell: pwsh
         run: |
+          $binDir = "$env:GITHUB_WORKSPACE/build/release/bin"
           $artifactDir = "$env:GITHUB_WORKSPACE/artifact"
+
           New-Item -ItemType Directory -Force -Path $artifactDir | Out-Null
 
-          Copy-Item "build/release/bin/*" -Destination $artifactDir -Recurse -Force
+          Copy-Item "$binDir/*" -Destination $artifactDir -Recurse -Force
 
           $sourceCommit = git rev-parse HEAD
           $buildDate = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss UTC")
@@ -119,7 +113,7 @@ jobs:
           ==================================
 
           Source repository: https://github.com/Frizti/Fritchii
-          Source release tag: fritchii-v6.2
+          Source release: fritchii-v6.2
           Source commit: $sourceCommit
 
           Build system: GitHub Actions
@@ -136,14 +130,13 @@ jobs:
           Executables:
           - fritchii.exe
           - lichii.exe
-          - eden-cli.exe
 
           Note:
           This is a manually triggered source build.
           It is not an official precompiled release binary.
           "@ | Set-Content "$artifactDir/BUILD-INFO.txt" -Encoding UTF8
 
-          Copy-Item configure.log, build.log, package.log -Destination $artifactDir
+          Copy-Item configure.log, build.log -Destination $artifactDir
 
           $hashes = Get-ChildItem -Path $artifactDir -File -Recurse |
             Sort-Object FullName |
