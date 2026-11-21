@@ -95,6 +95,8 @@ jobs:
 
       - name: Build executables
         shell: bash
+        env:
+          FRITCHII_SHADER_STAMP_ANY: "1"
         run: |
           set -euo pipefail
           sccache --zero-stats
@@ -156,9 +158,12 @@ jobs:
           - fritchii.exe
           - lichii.exe
 
-          Build adjustment:
-          The MSVC /we4459 warning-as-error promotion was removed
-          temporarily during CI. The warning remains enabled.
+          Build adjustments:
+          1. The MSVC /we4459 warning-as-error promotion was removed
+             temporarily during CI. The warning remains enabled.
+          2. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
+             build to permit an unrecognized shader stamp.
+
           No application features were intentionally removed.
 
           Note:
