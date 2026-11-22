@@ -148,26 +148,26 @@ jobs:
           }
 
           $newBlock = @'
-        #ifdef _WIN32
-                const char* cache_advice =
-                    device.GetDriverID() == VK_DRIVER_ID_AMD_PROPRIETARY
-                        ? "AMD: check Adrenalin > Gaming > Graphics > Shader Cache is on (not Off) "
-                          "and never use Reset Shader Cache; the folder sizes in the Driver cache "
-                          "folder lines show what the driver kept"
-                        : "NVIDIA: set Shader Cache Size to Unlimited in the NVIDIA Control Panel";
-        #else
-                const char* cache_advice =
-                    device.GetDriverID() == VK_DRIVER_ID_AMD_PROPRIETARY
-                        ? "AMD: check Adrenalin > Gaming > Graphics > Shader Cache is on (not Off) "
-                          "and never use Reset Shader Cache; the folder sizes in the Driver cache "
-                          "folder lines show what the driver kept"
-                        : "NVIDIA on Linux: the Driver cache folder line shows the folder and its "
-                          "__GL_SHADER_DISK_CACHE variables; keep space free on its disk");
-        #endif
-                LOG_WARNING(Render_Vulkan,
-                            "The driver's cache does not hold the precompiled pipelines: {} of {} prepared "
-                            "pipelines were compiled again, each a stall where a draw waits for it. {}",
-                            kept_compiles_session.slow, kept_compiles_session.builds, cache_advice);
+          #ifdef _WIN32
+                  const char* cache_advice =
+                      device.GetDriverID() == VK_DRIVER_ID_AMD_PROPRIETARY
+                          ? "AMD: check Adrenalin > Gaming > Graphics > Shader Cache is on (not Off) "
+                            "and never use Reset Shader Cache; the folder sizes in the Driver cache "
+                            "folder lines show what the driver kept"
+                          : "NVIDIA: set Shader Cache Size to Unlimited in the NVIDIA Control Panel";
+          #else
+                  const char* cache_advice =
+                      device.GetDriverID() == VK_DRIVER_ID_AMD_PROPRIETARY
+                          ? "AMD: check Adrenalin > Gaming > Graphics > Shader Cache is on (not Off) "
+                            "and never use Reset Shader Cache; the folder sizes in the Driver cache "
+                            "folder lines show what the driver kept"
+                          : "NVIDIA on Linux: the Driver cache folder line shows the folder and its "
+                            "__GL_SHADER_DISK_CACHE variables; keep space free on its disk";
+          #endif
+                  LOG_WARNING(Render_Vulkan,
+                              "The driver's cache does not hold the precompiled pipelines: {} of {} prepared "
+                              "pipelines were compiled again, each a stall where a draw waits for it. {}",
+                              kept_compiles_session.slow, kept_compiles_session.builds, cache_advice);
 '@
 
           $source = $source.Substring(0, $start) + $newBlock + $source.Substring($end)
