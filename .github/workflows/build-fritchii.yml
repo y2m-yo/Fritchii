@@ -50,30 +50,66 @@ jobs:
         shell: pwsh
         run: glslangValidator --version
 
-      - name: Fix MSVC C4459 build error
+      - name: Adjust MSVC warning promotions for CI
         shell: pwsh
         run: |
           $path = "src/CMakeLists.txt"
           $source = Get-Content $path -Raw
 
-          $pattern = "(?m)^[ \t]*/we4459[ \t]+# Declaration of 'identifier' hides global declaration\r?\n?"
+          $warnings = @(
+            @{ Flag = "4456"; Description = "hides previous local declaration" },
+            @{ Flag = "4457"; Description = "hides function parameter" },
+            @{ Flag = "4458"; Description = "hides class member" },
+            @{ Flag = "4459"; Description = "hides global declaration" }
+          )
 
-          $matches = [regex]::Matches($source, $pattern)
+          foreach ($warning in $warnings) {
+            $flag = $warning.Flag
+            $description = $warning.Description
+            $pattern = "(?m)^[ \t]*/we$flag[ \t]+# Declaration of 'identifier' $([regex]::Escape($description))\r?\n?"
 
-          if ($matches.Count -ne 1) {
-            throw "Expected exactly one C4459 warning-as-error setting, found $($matches.Count)."
+            $matches = [regex]::Matches($source, $pattern)
+
+            if ($matches.Count -ne 1) {
+              throw "Expected exactly one C$flag warning-as-error setting, found $($matches.Count)."
+            }
+
+            $source = [regex]::Replace($source, $pattern, "")
+            Write-Host "Removed only the C$flag warning-as-error promotion."
           }
-
-          $updated = [regex]::Replace($source, $pattern, "")
 
           [System.IO.File]::WriteAllText(
             $path,
-            $updated,
+            $source,
             [System.Text.UTF8Encoding]::new($false)
           )
 
-          Write-Host "Removed only the C4459 warning-as-error promotion."
-          Write-Host "The warning itself remains enabled."
+          Write-Host "The four warnings remain enabled; only their error promotions were removed."
+
+      - name: Fix MSVC DMA statistics conversion
+        shell: pwsh
+        run: |
+          $path = "src/video_core/engines/maxwell_dma.cpp"
+          $source = Get-Content $path -Raw
+
+          $old = 'u64{regs.pitch_out}'
+          $new = 'static_cast<u64>(std::abs(static_cast<s64>(regs.pitch_out)))'
+
+          $matches = [regex]::Matches($source, [regex]::Escape($old))
+
+          if ($matches.Count -ne 1) {
+            throw "Expected exactly one DMA statistics conversion, found $($matches.Count)."
+          }
+
+          $source = $source.Replace($old, $new)
+
+          [System.IO.File]::WriteAllText(
+            $path,
+            $source,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+          Write-Host "Adjusted only the signed DMA pitch conversion used for statistics."
 
       - name: Configure Windows build
         shell: bash
@@ -159,9 +195,12 @@ jobs:
           - lichii.exe
 
           Build adjustments:
-          1. The MSVC /we4459 warning-as-error promotion was removed
-             temporarily during CI. The warning remains enabled.
-          2. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
+          1. MSVC warning-as-error promotions C4456, C4457, C4458
+             and C4459 were removed temporarily during CI.
+             The warnings themselves remain enabled.
+          2. The signed DMA pitch conversion used for memory-write
+             statistics was adjusted for MSVC compatibility.
+          3. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
              build to permit an unrecognized shader stamp.
 
           No application features were intentionally removed.
