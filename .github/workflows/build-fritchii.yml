@@ -168,7 +168,7 @@ jobs:
                               "The driver's cache does not hold the precompiled pipelines: {} of {} prepared "
                               "pipelines were compiled again, each a stall where a draw waits for it. {}",
                               kept_compiles_session.slow, kept_compiles_session.builds, cache_advice);
-'@
+          '@
 
           $source = $source.Substring(0, $start) + $newBlock + $source.Substring($end)
 
