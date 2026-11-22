@@ -180,6 +180,72 @@ jobs:
 
           Write-Host "Fixed the Vulkan pipeline cache warning for MSVC."
 
+      - name: Fix MSVC Vulkan rasterizer preprocessor compatibility
+        shell: pwsh
+        run: |
+          $path = "src/video_core/renderer_vulkan/vk_rasterizer.cpp"
+          $source = Get-Content $path -Raw
+
+          $startMarker = "    // Which upscaler OoT got and from what"
+          $start = $source.IndexOf($startMarker)
+
+          if ($start -lt 0) {
+            throw "Could not find the expected Ocarina temporal upscaler log."
+          }
+
+          if ($source.IndexOf($startMarker, $start + $startMarker.Length) -ge 0) {
+            throw "The Ocarina temporal upscaler log marker is not unique."
+          }
+
+          $endMarker = "    );"
+          $end = $source.IndexOf($endMarker, $start)
+
+          if ($end -lt 0) {
+            throw "Could not find the end of the Ocarina temporal upscaler log."
+          }
+
+          $end += $endMarker.Length
+
+          $oldBlock = $source.Substring($start, $end - $start)
+
+          if ($oldBlock -notmatch 'LOG_INFO\(Render_Vulkan,' -or
+              $oldBlock -notmatch '#ifdef EGLANTINE_STREAMLINE' -or
+              $oldBlock -notmatch 'Streamline::IsDlssAvailable\(\)' -or
+              $oldBlock -notmatch '"no DLSS in this build"') {
+            throw "The original Ocarina temporal upscaler log does not match expectations."
+          }
+
+          $newBlock = @'
+              // Which upscaler OoT got and from what (2026-11-11: a player with DLSS on and Streamline
+              // loaded had no DLSS in 10 minutes, and the log couldn't say why).
+          #ifdef EGLANTINE_STREAMLINE
+              const char* streamline_status =
+                  Streamline::IsDlssAvailable() ? "DLSS available" : "DLSS not available";
+          #else
+              const char* streamline_status = "no DLSS in this build";
+          #endif
+              LOG_INFO(Render_Vulkan,
+                       "Ocarina temporal: upscaler {}{} (DLSS setting {}, OoT anti-aliasing {}, {})",
+                       *oot_backend == VideoCommon::OcarinaUpscaleBackend::Dlss  ? "DLSS"
+                       : fsr4_wanted                                             ? "FSR 4 (else FSR 3.1)"
+                       : *oot_backend == VideoCommon::OcarinaUpscaleBackend::Fsr ? "FSR 3.1"
+                                                                                 : "the game's own",
+                       oot_fsr4_unjittered ? ", no camera jitter" : "",
+                       Settings::values.nvidia_dlss.GetValue() ? "on" : "off",
+                       Settings::CanonicalizeEnum(Settings::values.oot_anti_aliasing.GetValue()),
+                       streamline_status);
+          '@
+
+          $source = $source.Substring(0, $start) + $newBlock + $source.Substring($end)
+
+          [System.IO.File]::WriteAllText(
+            $path,
+            $source,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+          Write-Host "Fixed the Vulkan rasterizer log for MSVC."
+
       - name: Configure Windows build
         shell: bash
         run: |
@@ -271,7 +337,9 @@ jobs:
              statistics was adjusted for MSVC compatibility.
           3. The Vulkan pipeline cache warning was refactored to
              avoid preprocessor directives inside macro arguments.
-          4. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
+          4. The Vulkan rasterizer DLSS status logging was refactored
+             to avoid preprocessor directives inside macro arguments.
+          5. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
              build to permit an unrecognized shader stamp.
 
           No application features were intentionally removed.
