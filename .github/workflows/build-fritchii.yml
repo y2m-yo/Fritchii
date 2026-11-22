@@ -111,6 +111,75 @@ jobs:
 
           Write-Host "Adjusted only the signed DMA pitch conversion used for statistics."
 
+      - name: Fix MSVC Vulkan pipeline cache preprocessor compatibility
+        shell: pwsh
+        run: |
+          $path = "src/video_core/renderer_vulkan/vk_pipeline_cache.cpp"
+          $source = Get-Content $path -Raw
+
+          $message = "The driver's cache does not hold the precompiled pipelines:"
+          $messagePosition = $source.IndexOf($message)
+
+          if ($messagePosition -lt 0) {
+            throw "Could not find the expected Vulkan pipeline cache warning."
+          }
+
+          $startMarker = "        LOG_WARNING(Render_Vulkan,"
+          $start = $source.LastIndexOf($startMarker, $messagePosition)
+
+          if ($start -lt 0) {
+            throw "Could not find the beginning of the Vulkan warning block."
+          }
+
+          $endMarker = "#endif"
+          $end = $source.IndexOf($endMarker, $messagePosition)
+
+          if ($end -lt 0) {
+            throw "Could not find the platform-specific #endif."
+          }
+
+          $end += $endMarker.Length
+
+          $oldBlock = $source.Substring($start, $end - $start)
+
+          if ($oldBlock -notmatch 'NVIDIA on Linux:' -or
+              $oldBlock -notmatch 'NVIDIA: set Shader Cache Size') {
+            throw "The original platform-specific warning does not match expectations."
+          }
+
+          $newBlock = @'
+        #ifdef _WIN32
+                const char* cache_advice =
+                    device.GetDriverID() == VK_DRIVER_ID_AMD_PROPRIETARY
+                        ? "AMD: check Adrenalin > Gaming > Graphics > Shader Cache is on (not Off) "
+                          "and never use Reset Shader Cache; the folder sizes in the Driver cache "
+                          "folder lines show what the driver kept"
+                        : "NVIDIA: set Shader Cache Size to Unlimited in the NVIDIA Control Panel";
+        #else
+                const char* cache_advice =
+                    device.GetDriverID() == VK_DRIVER_ID_AMD_PROPRIETARY
+                        ? "AMD: check Adrenalin > Gaming > Graphics > Shader Cache is on (not Off) "
+                          "and never use Reset Shader Cache; the folder sizes in the Driver cache "
+                          "folder lines show what the driver kept"
+                        : "NVIDIA on Linux: the Driver cache folder line shows the folder and its "
+                          "__GL_SHADER_DISK_CACHE variables; keep space free on its disk");
+        #endif
+                LOG_WARNING(Render_Vulkan,
+                            "The driver's cache does not hold the precompiled pipelines: {} of {} prepared "
+                            "pipelines were compiled again, each a stall where a draw waits for it. {}",
+                            kept_compiles_session.slow, kept_compiles_session.builds, cache_advice);
+'@
+
+          $source = $source.Substring(0, $start) + $newBlock + $source.Substring($end)
+
+          [System.IO.File]::WriteAllText(
+            $path,
+            $source,
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+          Write-Host "Fixed the Vulkan pipeline cache warning for MSVC."
+
       - name: Configure Windows build
         shell: bash
         run: |
@@ -200,7 +269,9 @@ jobs:
              The warnings themselves remain enabled.
           2. The signed DMA pitch conversion used for memory-write
              statistics was adjusted for MSVC compatibility.
-          3. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
+          3. The Vulkan pipeline cache warning was refactored to
+             avoid preprocessor directives inside macro arguments.
+          4. FRITCHII_SHADER_STAMP_ANY=1 was enabled for this test
              build to permit an unrecognized shader stamp.
 
           No application features were intentionally removed.
